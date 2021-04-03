@@ -1,0 +1,28 @@
+<html>
+<title>
+Dashboard
+</title>    
+<head>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='forum.css') }}"/>
+</head>
+    <br>
+    <div class = "customer-header">
+        <img id = "profile pic">
+        <form id = "login-form" method = "POST">
+            <a href = "{{ url_for('.upload_file') }}" class="customer-header-item"> User Area </a>
+            <span class = "space"></span>
+            <a href = "{{ url_for('.post_message') }}" class="customer-header-item" id = "customer"> Message Posting </a>
+            <span class = "passSpace"></span>
+            <a href = "{{ url_for('.upload_file') }}" class="customer-header-item" id = "changePassword"> Message Display </a>
+            <span class = "logoutSpace"></span>
+            <a href = "{{ url_for('.logout') }}" class="customer-header-item" id = "logout"> Logout </a>
+        </form>
+    </div>
+    <br>
+    <br>
+</head>
