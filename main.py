@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 
 from flask import *
 from flask.helpers import url_for
@@ -47,16 +46,25 @@ def check_login(user, password):
     a = query.add_filter("password", "=", password)
     return len(list(a.fetch()))
 
+@app.route('/check_password', methods = ['POST'])
+def check_password(): 
+    # if (result != "success"):
+    #         return render_template('edit_password.html', invalid = "The old password is incorrect")
+    #     else:
+    return redirect(url_for('/'))
+
 @app.route('/post_message')
 def post_message():
     return render_template('message_post.html')
+
+@app.route('/edit_password')
+def edit_password():
+    return render_template('edit_password.html')
 
 @app.route('/posted_message', methods = ['POST'])
 def posted_message():
     if request.method == 'POST':
         return "posted"
-
-
 
 
 @app.route('/upload', methods = ['POST'])
@@ -66,9 +74,11 @@ def upload_file():
       f.save(f.filename)
       return 'file uploaded successfully'
 
+
 @app.route('/logout')
 def logout():
-    session.pop('id', None)  
+    session.pop('user', None) 
+    # app.logger.info(session['user']) 
     return render_template('login.html')
 
 
