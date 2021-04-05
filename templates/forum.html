@@ -15,20 +15,21 @@
       alt="image"
       style="width: 120px; height: 120px"
     />
-    <a><label>{{user_name}}</label></a>
+    <br />
+    <a href="{{ url_for('.back') }}"><h4>Welcome {{user_name}}</h4></a>
   </div>
   <div class="header">
     <form id="login-form" method="POST">
       <a href="{{ url_for('.user_post_area') }}">User Post</a>
       <span class="space"></span>
-      <a href="{{ url_for('.post_message') }}" id="customer">
+      <a href="{{ url_for('.post_message') }}" id="customer" method="post">
         Message Posting
       </a>
       <span class="space"></span>
       <a href="{{ url_for('.upload_file') }}" id="changePassword">
         Message Display
       </a>
-      <span class="logoutSpace"></span>
+      <span class="space"></span>
       <a href="{{ url_for('.logout') }}" id="logout"> Logout </a>
     </form>
   </div>

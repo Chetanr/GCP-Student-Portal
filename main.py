@@ -18,6 +18,7 @@ import os
 from flask.helpers import url_for
 from google.auth.transport import requests
 from google.cloud import datastore, storage
+from google.cloud.storage import client
 import google.oauth2.id_token
 
 datastore_client = datastore.Client()
@@ -35,7 +36,7 @@ def check_login(user, password):
     a = query.add_filter("id", "=", user)
     a = query.add_filter("password", "=", password)
     result_list = list(a.fetch())
-    if (len(result_list)):
+    if (len(result_list) > 0):
         session['username'] = result_list[0]['user_name']
         session['image'] = result_list[0]['image']
         session['password'] = result_list[0]['password']
@@ -43,30 +44,77 @@ def check_login(user, password):
 
 @app.route('/check_password', methods = ['POST'])
 def check_password(): 
-    # if (result != "success"):
-    #         return render_template('edit_password.html', invalid = "The old password is incorrect")
-    #     else:
-    return redirect(url_for('/'))
+    if request.method == 'POST':
+        id = session['username']
+        currentPassword = request.form['currentPassword']
+        newpassword = request.form['newPassword']
+        result = check_db(id, currentPassword, newpassword)
+    if result:
+        session.clear() 
+        return render_template('login.html')
+    else:
+        return render_template('edit_password.html', user_name =  session['username'], image = session['image'], invalid = "The old password is incorrect")
+
+def check_db(id, currentPassword, newpassword):
+    query = datastore_client.query(kind = "user")
+    a = query.add_filter("user_name", "=", id)
+    a = query.add_filter("password", "=", currentPassword)
+    if(len(list(a.fetch())) > 0):
+        query = datastore_client.query(kind = "user")
+        a = query.add_filter("user_name", "=", id)
+        a = query.add_filter("password", "=", currentPassword)
+        result = list(a.fetch())
+        app.logger.info(result)
+        id = result[0].id
+        app.logger.info(id)
+        query = datastore_client.key('user', id)
+        user = datastore_client.get(query)
+        user["password"] = newpassword
+        temp = datastore_client.put(user)
+        app.logger.info(temp)
+        return True
+    else:
+        return False
+    
+
 
 @app.route('/user_post_area')
 def user_post_area(): 
-    # if (result != "success"):
-    #         return render_template('edit_password.html', invalid = "The old password is incorrect")
-    #     else:
-    return render_template('user_post_area.html')
+    return render_template('user_post_area.html', user_name =  session['username'], image = session['image'])
 
 @app.route('/post_message')
 def post_message():
-    return render_template('message_post.html')
+    return render_template('message_post.html', user_name =  session['username'], image = session['image'])
+
+def insert_post(subject,message, image_url):
+    entity = datastore.Entity(key = datastore_client.key('posts')) 
+    entity.update({
+        'subject' : subject,
+        'message' : message,
+        'image' : image_url,
+        'user_id' : session['username']
+    })
+    datastore_client.put(entity)
+    return "success"
 
 @app.route('/edit_password')
 def edit_password():
-    return render_template('edit_password.html')
+    return render_template('edit_password.html', user_name =  session['username'], image = session['image'])
 
 @app.route('/posted_message', methods = ['POST'])
 def posted_message():
     if request.method == 'POST':
-        return "posted"
+        subject = request.form['subject']
+        message = request.form['message']
+        uploaded_file = request.files.get('upload')
+        bucket = datastore_storage.get_bucket("s3793263-storage")
+        blob = bucket.blob(uploaded_file.filename)
+        blob.upload_from_string(
+        uploaded_file.read(),
+        content_type = uploaded_file.content_type
+        ) 
+        result = insert_post(subject, message, blob.public_url)
+    return "posted"
 
 
 @app.route('/upload', methods = ['POST'])
@@ -79,7 +127,7 @@ def upload_file():
 
 @app.route('/logout')
 def logout():
-    session.pop('user', None) 
+    session.clear() 
     # app.logger.info(session['user']) 
     return render_template('login.html')
 
@@ -90,7 +138,7 @@ def register():
 
 @app.route('/back')
 def back():
-    return render_template('forum.html')
+    return render_template('forum.html', user_name =  session['username'], image = session['image'])
 
 @app.route('/register_user', methods = ['POST'])
 def register_user():
@@ -104,8 +152,7 @@ def register_user():
         blob.upload_from_string(
         uploaded_file.read(),
         content_type = uploaded_file.content_type
-        )  
-        app.logger.info(blob.public_url)
+        ) 
         result = insert_new_user(id, username, password, blob.public_url)
         if (result != "success"):
             return render_template('register.html', invalid = result)
