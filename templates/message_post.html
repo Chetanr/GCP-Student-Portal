@@ -8,6 +8,15 @@
     <a type="button" value="Back" href = "{{ url_for('.back') }}" >Back </a>
   <link rel="stylesheet" href="{{ url_for('static', filename='message_post.css') }}" />
     <form id="message-form" method="POST" action = "{{ url_for('.posted_message') }}">
+      <div>
+        <img
+          id="imagePreview"
+          src="#"
+          alt="image"
+          style="width: 120px; height: 120px"
+        />
+        <a>{{user_name}}</a>
+      </div>
     <div id = "message-frame">
         <div id="subject-div">
             <label>Subject : </label>

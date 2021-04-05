@@ -14,6 +14,7 @@
 
 
 from flask import *
+import os
 from flask.helpers import url_for
 from google.auth.transport import requests
 from google.cloud import datastore, storage
@@ -22,20 +23,9 @@ import google.oauth2.id_token
 datastore_client = datastore.Client()
 datastore_storage = storage.Client()
 
+# CLOUD_STORAGE_BUCKET = os.environ['CLOUD_STORAGE_BUCKET']
+
 app = Flask(__name__)
-
-# def store_time(email, dt):
-#     entity = datastore.Entity(key=datastore_client.key('User', email, 'visit'))
-#     entity.update({
-#         'timestamp': dt
-#     })
-
-#     datastore_client.put(entity)
-
-
-#     return times
-# [END gae_python3_datastore_store_and_fetch_user_times]
-# [END gae_python38_datastore_store_and_fetch_user_times]
 
 app.secret_key = "0123456789"
 # bucket = storage.get_bucket("s3793263-storage")
@@ -44,7 +34,12 @@ def check_login(user, password):
     query = datastore_client.query(kind = "user")
     a = query.add_filter("id", "=", user)
     a = query.add_filter("password", "=", password)
-    return len(list(a.fetch()))
+    result_list = list(a.fetch())
+    if (len(result_list)):
+        session['username'] = result_list[0]['user_name']
+        session['image'] = result_list[0]['image']
+        session['password'] = result_list[0]['password']
+    return len(result_list)
 
 @app.route('/check_password', methods = ['POST'])
 def check_password(): 
@@ -52,6 +47,13 @@ def check_password():
     #         return render_template('edit_password.html', invalid = "The old password is incorrect")
     #     else:
     return redirect(url_for('/'))
+
+@app.route('/user_post_area')
+def user_post_area(): 
+    # if (result != "success"):
+    #         return render_template('edit_password.html', invalid = "The old password is incorrect")
+    #     else:
+    return render_template('user_post_area.html')
 
 @app.route('/post_message')
 def post_message():
@@ -96,13 +98,21 @@ def register_user():
         id = request.form['id']
         username = request.form['user']
         password = request.form['password']
-        result = insert_new_user(id, username, password)
+        uploaded_file = request.files.get('upload')
+        bucket = datastore_storage.get_bucket("s3793263-storage")
+        blob = bucket.blob(uploaded_file.filename)
+        blob.upload_from_string(
+        uploaded_file.read(),
+        content_type = uploaded_file.content_type
+        )  
+        app.logger.info(blob.public_url)
+        result = insert_new_user(id, username, password, blob.public_url)
         if (result != "success"):
             return render_template('register.html', invalid = result)
         else:
             return render_template('login.html')
 
-def insert_new_user(id, username, password):
+def insert_new_user(id, username, password, file_url):
     query1 = datastore_client.query(kind = "user")
     query2 = datastore_client.query(kind = "user")
     a = query1.add_filter("id", "=", id)
@@ -112,11 +122,12 @@ def insert_new_user(id, username, password):
     length1 = len(result1)
     length2 = len(result2)
     if (length1 == 0 and length2 == 0):
-        entity = datastore.Entity(key = datastore_client.key('user'))
+        entity = datastore.Entity(key = datastore_client.key('user')) 
         entity.update({
             'id' : id,
             'user_name' : username,
-            'password' : password
+            'password' : password,
+            'image' : file_url
         })
         datastore_client.put(entity)
         return "success"
@@ -135,9 +146,7 @@ def login():
         if (result == 0):
             return render_template('login.html', invalid = "ID or password is invalid")
         else:
-            session['user'] = username
-            app.logger.info(session['user'])
-            return render_template('forum.html')
+            return render_template('forum.html',user_name =  session['username'], image = session['image'])
 
 #starting point of the application
 @app.route('/')
