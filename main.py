@@ -14,7 +14,7 @@
 
 
 from flask import *
-import os
+import datetime
 from flask.helpers import url_for
 from google.auth.transport import requests
 from google.cloud import datastore, storage
@@ -24,12 +24,9 @@ import google.oauth2.id_token
 datastore_client = datastore.Client()
 datastore_storage = storage.Client()
 
-# CLOUD_STORAGE_BUCKET = os.environ['CLOUD_STORAGE_BUCKET']
-
 app = Flask(__name__)
 
 app.secret_key = "0123456789"
-# bucket = storage.get_bucket("s3793263-storage")
 
 def check_login(user, password):
     query = datastore_client.query(kind = "user")
@@ -92,7 +89,8 @@ def insert_post(subject,message, image_url):
         'subject' : subject,
         'message' : message,
         'image' : image_url,
-        'user_id' : session['username']
+        'user_id' : session['username'],
+        'post_date' : datetime.datetime.now()
     })
     datastore_client.put(entity)
     return "success"
@@ -128,13 +126,36 @@ def upload_file():
 @app.route('/logout')
 def logout():
     session.clear() 
-    # app.logger.info(session['user']) 
+    # app.logger.info(session['username']) 
     return render_template('login.html')
 
 
 @app.route('/register')
 def register():
     return render_template('register.html')
+
+@app.route('/message_display')
+def message_display():
+    result = get_messages()
+    return render_template('all_posts.html', user_name =  session['username'], image = session['image'], posts = result)
+
+def get_messages():
+    query = datastore_client.query(kind = "posts")
+    query.order = ["-post_date"]
+    result = list(query.fetch(limit=10))
+    return result
+
+@app.route('/edit_post')
+def edit_post():
+    result = get_my_posts(session['username'])
+    app.logger.info(result)
+    return render_template('edit_post.html', user_name =  session['username'], image = session['image'],posts = result)
+
+def get_my_posts(user):
+    query = datastore_client.query(kind = "posts")
+    a = query.add_filter("user_id", "=", user)
+    result = list(a.fetch())
+    return result
 
 @app.route('/back')
 def back():

@@ -1,0 +1,42 @@
+<html>
+  <title>Messages</title>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='all_posts.css') }}"
+  />
+  <br />
+  <div>
+    <img
+      id="imagePreview"
+      src="{{image}}"
+      alt="image"
+      style="width: 120px; height: 120px"
+    />
+    <br />
+    <a href="{{ url_for('.back') }}"><h4>{{user_name}}</h4></a>
+  </div>
+  <body>
+    <ul>
+      {% for post in posts %}
+      <br />
+      <li>
+        <img
+          src="{{post['image']}}"
+          alt="image"
+          style="width: 80px; height: 80px"
+        />
+        <br />
+        <label><b>Subject:</b> {{ post['subject']}}</label>
+        <br />
+        <label><b>Message</b> {{ post['message']}}</label>
+        <br />
+        <label><b>Posted by: </b> {{ post['user_id']}}</label>
+        &nbsp &nbsp &nbsp<label><b>Posted on</b> {{ post['post_date']}}</label>
+      </li>
+      {% endfor %}
+    </ul>
+  </body>
+</html>
