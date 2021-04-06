@@ -16,7 +16,7 @@
     <form
       id="message-form"
       method="POST"
-      action="{{ url_for('.posted_message') }}"
+      action="{{ url_for('.update_post') }}"
       enctype="multipart/form-data"
     >
       <div>
@@ -31,14 +31,14 @@
       </div>
       <div id="message-frame">
         <div>
-          &nbsp &nbsp &nbsp<img id = "imagePreview2" src = "#" alt = "image" style="width:120px;height:120px;">
+          &nbsp &nbsp &nbsp<img id = "imagePreview2" src = "{{imagePreview2}}" alt = "image" style="width:120px;height:120px;">
           <br>
           &nbsp &nbsp &nbsp &nbsp<input type="file" id="upload" name = "upload" accept="image/x-png,image/gif,image/jpeg" onchange="loadFile(event)"></input>
         </div>
         <br>
         <div id="subject-div">
           <label>Subject : </label>
-          <input type="text" name="subject" class="textbox" />
+          <input type="text" name="subject" class="textbox" value="{{ post_subject }}"/>
         </div>
         <br />
         <br />
@@ -49,12 +49,13 @@
             name="message"
             class="textbox"
             style="font-size: 12pt; height: 100px; width: 250px"
+            value="{{ post_message }}"
           />
         </div>
         <br />
         <br />
         <div>
-          <button type="submit" id="submit">Post Message</button>
+          <button type="submit" id="submit">Edit Post</button>
         </div>
       </div>
     </form>

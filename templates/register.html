@@ -21,17 +21,18 @@
       id="login-form"
       method="POST"
       action="{{ url_for('.register_user')  }}"
+      enctype="multipart/form-data"
     >
       <br />
       <br />
       <br />
       <div id="login-frame">
-        <form method="POST" action = "{{ url_for('.upload_file') }}">
+        <!-- <form method="POST" action = "{{ url_for('.upload_file') }}"> -->
           <div>
             <img id = "imagePreview" src = "#" alt = "image" style="width:120px;height:120px;">
-            &nbsp &nbsp &nbsp<input type="file" id="upload" accept="image/x-png,image/gif,image/jpeg" onchange="loadFile(event)"></input>
+            &nbsp &nbsp &nbsp<input type="file" id="upload" name = "upload" accept="image/x-png,image/gif,image/jpeg" onchange="loadFile(event)"></input>
           </div>
-        </form>
+        <!-- </form> -->
         <br>
 
         <div id="user">
