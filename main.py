@@ -19,7 +19,6 @@ from flask.helpers import url_for
 from google.auth.transport import requests
 from google.cloud import datastore, storage
 from google.cloud.storage import client
-import google.oauth2.id_token
 
 datastore_client = datastore.Client()
 datastore_storage = storage.Client()
@@ -106,15 +105,6 @@ def update_post():
         content_type = file.content_type
         ) 
         app.logger.info(blob.public_url)
-        # entity = datastore.Entity(key = datastore_client.key('posts')) 
-        # entity.update({
-        # 'subject' : subject,
-        # 'message' : message,
-        # 'image' : blob.public_url,
-        # 'user_id' : session['username'],
-        # 'post_date' : datetime.datetime.now()
-        # })
-        # datastore_client.put(entity)
         insert_updated_post(subject,message, blob.public_url)
         result = get_messages()
         return render_template('all_posts.html', user_name =  session['username'], image = session['image'], posts = result)
@@ -280,25 +270,6 @@ def login():
 #starting point of the application
 @app.route('/')
 def root():
-
-    # if id_token:
-    #     try:
-    #         # Verify the token against the Firebase Auth API. This example
-    #         # verifies the token on each page load. For improved performance,
-    #         # some applications may wish to cache results in an encrypted
-    #         # session store (see for instance
-    #         # http://flask.pocoo.org/docs/1.0/quickstart/#sessions).
-    #         claims = google.oauth2.id_token.verify_firebase_token(
-    #             id_token, firebase_request_adapter)
-
-    #         store_time(claims['email'], datetime.datetime.now())
-    #         times = fetch_times(claims['email'], 10)
-
-    #     except ValueError as exc:
-    #         # This will be raised if the token is expired or any other
-    #         # verification checks fail.
-    #         error_message = str(exc)
-
     return render_template('login.html')
 
 
