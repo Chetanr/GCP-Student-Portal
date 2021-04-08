@@ -163,7 +163,8 @@ def posted_message():
         content_type = uploaded_file.content_type
         ) 
         result = insert_post(subject, message, blob.public_url)
-    return "posted"
+    result = get_messages()
+    return render_template('all_posts.html', user_name =  session['username'], image = session['image'], posts = result)
 
 
 @app.route('/upload', methods = ['POST'])
