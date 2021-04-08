@@ -1,0 +1,26 @@
+<html>
+  <title>Task 2.2</title>
+  <body>
+    <div>
+      <table>
+        <tr>
+          <th>Country Label</th>
+          <th>Product Type</th>
+          <th>Trade Deficient Value</th>
+          <th>Status</th>
+        </tr>
+        <tr>
+          {% for result in results %}
+          <td>{{result.COUNTRY_LABEL}}</td>
+          &nbsp
+          <td>{{result.PRODUCT_TYPE}}</td>
+          &nbsp
+          <td>{{result.TRADE_DEFICIENT_VALUE}}</td>
+          &nbsp
+          <td>{{result.STATUS}}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </body>
+</html>
