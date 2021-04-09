@@ -25,7 +25,7 @@ app = Flask(__name__)
 def one():
     bigquery_client = bigquery.Client()
     query = """
-        SELECT time_ref as TIME_REF, sum(value) as VALUE FROM `chetan-r-project2.task_2_1.task2_1` group by time_ref order by VALUE desc LIMIT 10
+        SELECT time_ref as TIME_REF, SUM(CASE WHEN account='Imports' THEN value END) + SUM(CASE WHEN account='Exports' THEN value END) as VALUE FROM `chetan-r-project2.task_2_1.task2_1` group by time_ref order by VALUE desc LIMIT 10
         """
     result = bigquery_client.query(query)
     return render_template('one.html', results = result)
@@ -34,20 +34,14 @@ def one():
 def two():
     bigquery_client = bigquery.Client()
     query = """
-        SELECT t2.country_label AS COUNTRY_LABEL,t1.product_type AS PRODUCT_TYPE,(t1.value - t3.value) AS TRADE_DEFICIENT_VALUE, t1.status AS STATUS
-FROM `chetan-r-project2.task_2_1.task2_1` AS t1, `chetan-r-project2.task_2_1.country` AS t2,`chetan-r-project2.task_2_1.task2_1` AS t3
-JOIN
-  t3 ON t1.time_ref = t3.time_ref
-JOIN
-  t2 ON t1.country_code = t2.country_code AND t3.country_code = t2.country_code
-WHERE
-  t3.account = 'Exports' AND t1.account = 'Imports' AND t1.status = 'F'
-GROUP BY
-  COUNTRY_LABEL,PRODUCT_TYPE,TRADE_DEFICIENT_VALUE,STATUS
-ORDER BY
-  TRADE_DEFICIENT_VALUE DESC
-LIMIT
-  50
+        SELECT country_label as COUNTRY_LABEL, product_type as PRODUCT_TYPE, SUM(CASE WHEN account='Imports' THEN value END) - SUM(CASE WHEN account='Exports' THEN value END)AS TRADE_DEFICIENT_VALUE, status as STATUS
+        FROM `chetan-r-project2.task_2_1.task2_1` LEFT JOIN `chetan-r-project2.task_2_1.country`
+        USING(country_code)
+        WHERE SUBSTRING(time_ref, 1, 4) IN ('2014', '2015', '2016')
+        AND status='F' AND product_type = "Goods"
+        GROUP BY country_label, product_type, status
+        ORDER BY TRADE_DEFICIENT_VALUE DESC
+        LIMIT 50
         """
     result = bigquery_client.query(query)
     return render_template('two.html', results = result)
@@ -56,7 +50,18 @@ LIMIT
 def three():
     bigquery_client = bigquery.Client()
     query = """
-        SELECT time_ref as TIME_REF, sum(value) as VALUE FROM `chetan-r-project2.task_2_1.task2_1` group by time_ref order by VALUE desc LIMIT 10
+        SELECT service_label as SERVICE_LABEL, SUM(CASE WHEN account='Exports' THEN value END) - SUM(CASE WHEN account='Imports' THEN value END)AS TRADE_SURPLUS_VALUE
+FROM `chetan-r-project2.task_2_1.task2_1` LEFT JOIN `chetan-r-project2.task_2_1.serivce` on code = service_code
+WHERE country_code in (SELECT country_code
+        FROM `chetan-r-project2.task_2_1.task2_1` LEFT JOIN `chetan-r-project2.task_2_1.country`
+        USING(country_code)
+        WHERE SUBSTRING(time_ref, 1, 4) IN ('2014', '2015', '2016')
+        AND status='F' AND product_type = "Goods"
+        GROUP BY country_code, product_type, status
+        LIMIT 50)
+GROUP BY SERVICE_LABEL    
+ORDER BY TRADE_SURPLUS_VALUE DESC
+        LIMIT 30 
         """
     result = bigquery_client.query(query)
     return render_template('three.html', results = result)

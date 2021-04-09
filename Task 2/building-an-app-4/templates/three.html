@@ -1,0 +1,27 @@
+<html>
+  <title>Task 2.3</title>
+  <style>
+    table,
+    th,
+    td {
+      border: 1px solid black;
+    }
+  </style>
+  <body>
+    <div>
+      <table>
+        <tr>
+          <th>Service Label</th>
+          <th>Trade Surplus Value</th>
+        </tr>
+        <tr>
+          {% for result in results %} &nbsp
+          <td>{{result.SERVICE_LABEL}}</td>
+          &nbsp
+          <td>{{result.TRADE_SURPLUS_VALUE}}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </body>
+</html>

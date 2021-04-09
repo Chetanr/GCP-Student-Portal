@@ -1,5 +1,12 @@
 <html>
   <title>Task 2.2</title>
+  <style>
+    table,
+    th,
+    td {
+      border: 1px solid black;
+    }
+  </style>
   <body>
     <div>
       <table>
@@ -10,7 +17,7 @@
           <th>Status</th>
         </tr>
         <tr>
-          {% for result in results %}
+          {% for result in results %} &nbsp
           <td>{{result.COUNTRY_LABEL}}</td>
           &nbsp
           <td>{{result.PRODUCT_TYPE}}</td>
