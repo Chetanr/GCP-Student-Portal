@@ -1,0 +1,56 @@
+<html>
+  <title>Messages</title>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='all_posts.css') }}"
+  />
+  <br />
+  <div>
+    <img
+      id="imagePreview"
+      src="{{image}}"
+      alt="image"
+      style="width: 120px; height: 120px"
+    />
+    <br />
+    <a href="{{ url_for('.back') }}"><h4>{{user_name}}</h4></a>
+  </div>
+  <body>
+    <form id="login-form" method="POST" action="{{ url_for('.edit_a_post') }}">
+      <ul>
+        {% for post in posts %}
+        <br />
+        <li>
+          <img
+            id="image"
+            src="{{post['image']}}"
+            alt="image"
+            style="width: 80px; height: 80px"
+            value="{{post['image']}}"
+          />
+          <br />
+          <label id="subject" name="subject" value="{{ post['subject']}}"
+            ><b>Subject:</b> {{ post['subject']}}</label
+          >
+          <br />
+          <label id="message" name="message" value="{{ post['message']}}"
+            ><b>Message: </b> {{ post['message']}}</label
+          >
+          <br />
+          <label><b>Posted by: </b> {{ post['user_id']}}</label>
+          &nbsp &nbsp &nbsp<label
+            ><b>Posted on</b> {{ post['post_date']}}</label
+          >
+          <input type="hidden" name="post_subject" value = "{{post['subject']}}"></input>
+          <input type="hidden" name="post_message" value = "{{post['message']}}"></input>
+          <input type="hidden" name="post_image" value = "{{post['image']}}"></input>
+          &nbsp &nbsp &nbsp <button type="submit">Edit</button>
+        </li>
+        {% endfor %}
+      </ul>
+    </form>
+  </body>
+</html>
