@@ -1,0 +1,1299 @@
+Student Name : Chetan Revappa
+Student Number: S3793263
+
+
+----------CODE OF TASK 1----------------------
+
+---app.yaml---
+
+runtime: python39
+
+handlers:
+  # This configures Google App Engine to serve the files in the app's static
+  # directory.
+  - url: /static
+    static_dir: static
+
+    # This handler routes all requests not caught above to your main app. It is
+    # required when static routes are defined, but can be omitted (along with
+    # the entire handlers section) when there are no static files defined.
+  - url: /.*
+    script: auto
+
+env_variables:
+  CLOUD_STORAGE_BUCKET: s3793263-storage
+
+
+---main.py---
+
+# Copyright 2018 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+from flask import *
+import datetime
+from flask.helpers import url_for
+from google.auth.transport import requests
+from google.cloud import datastore, storage
+from google.cloud.storage import client
+
+datastore_client = datastore.Client()
+datastore_storage = storage.Client()
+
+app = Flask(__name__)
+
+app.secret_key = "0123456789"
+
+def check_login(user, password):
+    query = datastore_client.query(kind = "user")
+    a = query.add_filter("id", "=", user)
+    a = query.add_filter("password", "=", password)
+    result_list = list(a.fetch())
+    if (len(result_list) > 0):
+        session['username'] = result_list[0]['user_name']
+        session['image'] = result_list[0]['image']
+        session['password'] = result_list[0]['password']
+    return len(result_list)
+
+@app.route('/check_password', methods = ['POST'])
+def check_password(): 
+    if request.method == 'POST':
+        id = session['username']
+        currentPassword = request.form['currentPassword']
+        newpassword = request.form['newPassword']
+        result = check_db(id, currentPassword, newpassword)
+    if result:
+        session.clear() 
+        return render_template('login.html')
+    else:
+        return render_template('edit_password.html', user_name =  session['username'], image = session['image'], invalid = "The old password is incorrect")
+
+def check_db(id, currentPassword, newpassword):
+    query = datastore_client.query(kind = "user")
+    a = query.add_filter("user_name", "=", id)
+    a = query.add_filter("password", "=", currentPassword)
+    if(len(list(a.fetch())) > 0):
+        query = datastore_client.query(kind = "user")
+        a = query.add_filter("user_name", "=", id)
+        a = query.add_filter("password", "=", currentPassword)
+        result = list(a.fetch())
+        id = result[0].id
+        query = datastore_client.key('user', id)
+        user = datastore_client.get(query)
+        user["password"] = newpassword
+        temp = datastore_client.put(user)
+        return True
+    else:
+        return False
+    
+
+
+@app.route('/user_post_area')
+def user_post_area(): 
+    return render_template('user_post_area.html', user_name =  session['username'], image = session['image'])
+
+
+@app.route('/post_message')
+def post_message():
+    return render_template('message_post.html', user_name =  session['username'], image = session['image'])
+
+@app.route('/edit_a_post', methods = ['POST'])
+def edit_a_post():
+    if request.method == 'POST':
+        subject = request.form.get('post_subject')
+        message = request.form.get('post_message')
+        image = request.form.get('post_image')
+        session['post_subject'] = subject
+        session['post_message'] = message
+    return render_template('edit_a_post.html', imagePreview2 = image, post_subject = subject, post_message = message, user_name =  session['username'], image = session['image'])
+
+@app.route('/update_post', methods = ['POST'])
+def update_post():
+    if request.method == 'POST':
+        subject = request.form['subject']
+        message = request.form['message']
+        file = request.files.get('upload')
+        app.logger.info(subject)
+        app.logger.info(message)
+        bucket = datastore_storage.get_bucket("s3793263-storage")
+        blob = bucket.blob(file.filename)
+        blob.upload_from_string(
+        file.read(),
+        content_type = file.content_type
+        ) 
+        app.logger.info(blob.public_url)
+        insert_updated_post(subject,message, blob.public_url)
+        result = get_messages()
+        return render_template('all_posts.html', user_name =  session['username'], image = session['image'], posts = result)
+
+def insert_updated_post(subject,message, image_url):
+    query = datastore_client.query(kind = "posts")
+    a = query.add_filter("user_id", "=", session['username'])
+    a = query.add_filter("subject", "=", session['post_subject'])
+    a = query.add_filter("message", "=", session['post_message'])
+    result = list(a.fetch())
+    id = result[0].id
+    app.logger.info(id)
+    complete_key = datastore_client.key("posts", id)
+
+    task = datastore.Entity(key=complete_key)
+
+    task.update(
+    {
+        "user_id": session['username'],
+        "subject": subject,
+        "message": message,
+        "image": image_url,
+        "post_date": datetime.datetime.now()
+    }
+    )
+    datastore_client.put(task)
+
+
+
+def insert_post(subject,message, image_url):
+    entity = datastore.Entity(key = datastore_client.key('posts')) 
+    entity.update({
+        'subject' : subject,
+        'message' : message,
+        'image' : image_url,
+        'user_id' : session['username'],
+        'post_date' : datetime.datetime.now()
+    })
+    datastore_client.put(entity)
+    return "success"
+
+@app.route('/edit_password')
+def edit_password():
+    return render_template('edit_password.html', user_name =  session['username'], image = session['image'])
+
+@app.route('/posted_message', methods = ['POST'])
+def posted_message():
+    if request.method == 'POST':
+        subject = request.form['subject']
+        message = request.form['message']
+        uploaded_file = request.files.get('upload')
+        bucket = datastore_storage.get_bucket("s3793263-storage")
+        blob = bucket.blob(uploaded_file.filename)
+        blob.upload_from_string(
+        uploaded_file.read(),
+        content_type = uploaded_file.content_type
+        ) 
+        result = insert_post(subject, message, blob.public_url)
+    result = get_messages()
+    return render_template('all_posts.html', user_name =  session['username'], image = session['image'], posts = result)
+
+
+@app.route('/upload', methods = ['POST'])
+def upload_file():
+   if request.method == 'POST':
+      f = request.files['file']
+      f.save(f.filename)
+      return 'file uploaded successfully'
+
+
+@app.route('/logout')
+def logout():
+    session.clear() 
+    # app.logger.info(session['username']) 
+    return render_template('login.html')
+
+
+@app.route('/register')
+def register():
+    return render_template('register.html')
+
+@app.route('/message_display')
+def message_display():
+    result = get_messages()
+    return render_template('all_posts.html', user_name =  session['username'], image = session['image'], posts = result)
+
+def get_messages():
+    query = datastore_client.query(kind = "posts")
+    query.order = ["-post_date"]
+    result = list(query.fetch(limit=10))
+    return result
+
+@app.route('/edit_post')
+def edit_post():
+    result = get_my_posts(session['username'])
+    app.logger.info(result)
+    return render_template('edit_post.html', user_name =  session['username'], image = session['image'],posts = result)
+
+def get_my_posts(user):
+    query = datastore_client.query(kind = "posts")
+    a = query.add_filter("user_id", "=", user)
+    result = list(a.fetch())
+    return result
+
+@app.route('/back')
+def back():
+    return render_template('forum.html', user_name =  session['username'], image = session['image'])
+
+@app.route('/register_user', methods = ['POST'])
+def register_user():
+    if request.method == 'POST':
+        id = request.form['id']
+        username = request.form['user']
+        password = request.form['password']
+        uploaded_file = request.files.get('upload')
+        bucket = datastore_storage.get_bucket("s3793263-storage")
+        blob = bucket.blob(uploaded_file.filename)
+        blob.upload_from_string(
+        uploaded_file.read(),
+        content_type = uploaded_file.content_type
+        ) 
+        result = insert_new_user(id, username, password, blob.public_url)
+        if (result != "success"):
+            return render_template('register.html', invalid = result)
+        else:
+            return render_template('login.html')
+
+def insert_new_user(id, username, password, file_url):
+    query1 = datastore_client.query(kind = "user")
+    query2 = datastore_client.query(kind = "user")
+    a = query1.add_filter("id", "=", id)
+    b = query2.add_filter("user_name", "=", username)
+    result1 = list(a.fetch())
+    result2 = list(b.fetch())
+    length1 = len(result1)
+    length2 = len(result2)
+    if (length1 == 0 and length2 == 0):
+        entity = datastore.Entity(key = datastore_client.key('user')) 
+        entity.update({
+            'id' : id,
+            'user_name' : username,
+            'password' : password,
+            'image' : file_url
+        })
+        datastore_client.put(entity)
+        return "success"
+    elif (length1 > 0 and result1[0]["id"] == id ):
+        return "id already exists"
+    elif (length2 > 0 and result2[0]["user_name"] == username):
+        return "username already exists"
+
+
+@app.route('/login', methods = ['POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['user']
+        password = request.form['password']
+        result = check_login(username,password)
+        if (result == 0):
+            return render_template('login.html', invalid = "ID or password is invalid")
+        else:
+            return render_template('forum.html',user_name =  session['username'], image = session['image'])
+
+#starting point of the application
+@app.route('/')
+def root():
+    return render_template('login.html')
+
+
+
+if __name__ == '__main__':
+    app.run(host='127.0.0.1', port=8080, debug=True)
+
+
+---login.html---
+
+<!DOCTYPE html>
+<html>
+  <title>Welcome</title>
+
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='login.css') }}"
+    />
+    <form
+      id="login-form" method="POST" action = "{{ url_for('.login') }}"
+    >
+      <br />
+      <br />
+      <br />
+      <div id="login-frame">
+        <div id="user">
+          <label for="Username">ID:</label>
+          <input type="text" name="user" class="textbox"/>
+        </div>
+        <br />
+        <br />
+        <div id="pwd">
+          <label for="Password">Password:</label>
+          <input type="password" name="password" class="textbox" />
+        </div>
+        <br />
+        <br />
+        <div>
+          <button type="submit" id="submit">Login</button>
+        </form>
+          <br />
+          <a href="{{ url_for('.register') }}"> Register </a>
+          <br />
+          <br />
+          <label id="invalid" name="invalid">{{invalid}}</label>
+        </div>
+      </div>
+  </body>
+</html>
+
+
+---all_posts.html---
+
+<html>
+  <title>Messages</title>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='all_posts.css') }}"
+  />
+  <br />
+  <div>
+    <img
+      id="imagePreview"
+      src="{{image}}"
+      alt="image"
+      style="width: 120px; height: 120px"
+    />
+    <br />
+    <a href="{{ url_for('.back') }}"><h4>{{user_name}}</h4></a>
+  </div>
+  <body>
+    <ul>
+      {% for post in posts %}
+      <br />
+      <li onclick="postDetail()">
+        <img
+          src="{{post['image']}}"
+          alt="image"
+          style="width: 80px; height: 80px"
+        />
+        <br />
+        <label><b>Subject:</b> {{ post['subject']}}</label>
+        <br />
+        <label><b>Message</b> {{ post['message']}}</label>
+        <br />
+        <label><b>Posted by: </b> {{ post['user_id']}}</label>
+        &nbsp &nbsp &nbsp<label><b>Posted on</b> {{ post['post_date']}}</label>
+      </li>
+      {% endfor %}
+    </ul>
+  </body>
+</html>
+
+
+---edit_a_post.html---
+
+<html>
+  <br />
+  <br />
+  <title>Post Message</title>
+  <body>
+    <script type = "text/javascript">
+      var loadFile = function (event) {
+      var image = document.getElementById("imagePreview2");
+      image.src = URL.createObjectURL(event.target.files[0]);
+      };
+    </script>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='message_post.css') }}"
+    />
+    <form
+      id="message-form"
+      method="POST"
+      action="{{ url_for('.update_post') }}"
+      enctype="multipart/form-data"
+    >
+      <div>
+        <img
+          id="imagePreview"
+          src="{{image}}"
+          alt="image"
+          style="width: 120px; height: 120px"
+        />
+        <br />
+        <a href="{{ url_for('.back') }}"><h4>{{user_name}}</h4></a>
+      </div>
+      <div id="message-frame">
+        <div>
+          &nbsp &nbsp &nbsp<img id = "imagePreview2" src = "{{imagePreview2}}" alt = "image" style="width:120px;height:120px;">
+          <br>
+          &nbsp &nbsp &nbsp &nbsp<input type="file" id="upload" name = "upload" accept="image/x-png,image/gif,image/jpeg" onchange="loadFile(event)"></input>
+        </div>
+        <br>
+        <div id="subject-div">
+          <label>Subject : </label>
+          <input type="text" name="subject" class="textbox" value="{{ post_subject }}"/>
+        </div>
+        <br />
+        <br />
+        <div id="message-div">
+          <label>Message : </label>
+          &nbsp<input
+            type="text"
+            name="message"
+            class="textbox"
+            style="font-size: 12pt; height: 100px; width: 250px"
+            value="{{ post_message }}"
+          />
+        </div>
+        <br />
+        <br />
+        <div>
+          <button type="submit" id="submit">Edit Post</button>
+        </div>
+      </div>
+    </form>
+  </body>
+</html>
+
+
+---edit_password.html---
+
+<html>
+<title>
+Edit Password
+</title> 
+
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+
+    <body>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel = "stylesheet" href = "{{ url_for('static', filename='edit_password.css') }}">
+        <form id = "customer-form" action = "{{ url_for('.check_password') }}" method = "POST">
+        <br>
+        <div>
+            <img
+              id="imagePreview"
+              src="{{image}}"
+              alt="image"
+              style="width: 120px; height: 120px"
+            />
+            <br />
+            <a href="{{ url_for('.back') }}"><h4>Welcome {{user_name}}</h4></a>
+          </div>
+        <div id = "password-details">
+            <div id = "oldPassword">
+                <label for = "existing-password"><Strong>Current Password:</Strong></label>
+                <input type = "text" name = "currentPassword" class = "style-2">
+            </div>
+            <br>
+            <br>
+            <div id = "newPassword">
+                <label for = "new-password"><Strong>New Password:</Strong></label>
+                &nbsp &nbsp &nbsp <input type = "text" name = "newPassword" class = "style-2">
+            </div>
+            <br>
+            <br>
+            <div id = "confirmPassword">
+                <label for = "confirm-password"><Strong>Confirm Password:</Strong></label>
+                <input type = "text" name = "confirmPassword" class = "style-2">
+            </div>
+            <br>
+            <br>
+            <div>
+                <button type = "submit" id = "submit">Change Password</button>
+            </div> 
+            <div>
+                <label id = "invalid-label" name = "invalid">{{invalid}}</label>
+            <div>
+        </div>
+    </body>
+</html>
+
+
+---edit_post.html---
+
+<html>
+  <title>Messages</title>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='all_posts.css') }}"
+  />
+  <br />
+  <div>
+    <img
+      id="imagePreview"
+      src="{{image}}"
+      alt="image"
+      style="width: 120px; height: 120px"
+    />
+    <br />
+    <a href="{{ url_for('.back') }}"><h4>{{user_name}}</h4></a>
+  </div>
+  <body>
+    <form id="login-form" method="POST" action="{{ url_for('.edit_a_post') }}">
+      <ul>
+        {% for post in posts %}
+        <br />
+        <li>
+          <img
+            id="image"
+            src="{{post['image']}}"
+            alt="image"
+            style="width: 80px; height: 80px"
+            value="{{post['image']}}"
+          />
+          <br />
+          <label id="subject" name="subject" value="{{ post['subject']}}"
+            ><b>Subject:</b> {{ post['subject']}}</label
+          >
+          <br />
+          <label id="message" name="message" value="{{ post['message']}}"
+            ><b>Message: </b> {{ post['message']}}</label
+          >
+          <br />
+          <label><b>Posted by: </b> {{ post['user_id']}}</label>
+          &nbsp &nbsp &nbsp<label
+            ><b>Posted on</b> {{ post['post_date']}}</label
+          >
+          <input type="hidden" name="post_subject" value = "{{post['subject']}}"></input>
+          <input type="hidden" name="post_message" value = "{{post['message']}}"></input>
+          <input type="hidden" name="post_image" value = "{{post['image']}}"></input>
+          &nbsp &nbsp &nbsp <button type="submit">Edit</button>
+        </li>
+        {% endfor %}
+      </ul>
+    </form>
+  </body>
+</html>
+
+
+---forum.html---
+
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='forum.css') }}"
+    />
+  </head>
+  <title>Dashboard</title>
+  <br />
+  <div>
+    <img
+      id="imagePreview"
+      src="{{image}}"
+      alt="image"
+      style="width: 120px; height: 120px"
+    />
+    <br />
+    <a href="{{ url_for('.back') }}"><h4>Welcome {{user_name}}</h4></a>
+  </div>
+  <div class="header">
+    <form id="login-form" method="POST">
+      <a href="{{ url_for('.user_post_area') }}">User Post</a>
+      <span class="space"></span>
+      <a href="{{ url_for('.post_message') }}" id="customer" method="post">
+        Message Posting
+      </a>
+      <span class="space"></span>
+      <a href="{{ url_for('.message_display') }}" id="changePassword">
+        Message Display
+      </a>
+      <span class="space"></span>
+      <a href="{{ url_for('.logout') }}" id="logout"> Logout </a>
+    </form>
+  </div>
+</html>
+
+
+---message_post.html---
+
+<html>
+  <br />
+  <br />
+  <title>Post Message</title>
+  <body>
+    <script type = "text/javascript">
+      var loadFile = function (event) {
+      var image = document.getElementById("imagePreview2");
+      image.src = URL.createObjectURL(event.target.files[0]);
+      };
+    </script>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='message_post.css') }}"
+    />
+    <form
+      id="message-form"
+      method="POST"
+      action="{{ url_for('.posted_message') }}"
+      enctype="multipart/form-data"
+    >
+      <div>
+        <img
+          id="imagePreview"
+          src="{{image}}"
+          alt="image"
+          style="width: 120px; height: 120px"
+        />
+        <br />
+        <a href="{{ url_for('.back') }}"><h4>{{user_name}}</h4></a>
+      </div>
+      <div id="message-frame">
+        <div>
+          &nbsp &nbsp &nbsp<img id = "imagePreview2" src = "#" alt = "image" style="width:120px;height:120px;">
+          <br>
+          &nbsp &nbsp &nbsp &nbsp<input type="file" id="upload" name = "upload" accept="image/x-png,image/gif,image/jpeg" onchange="loadFile(event)"></input>
+        </div>
+        <br>
+        <div id="subject-div">
+          <label>Subject : </label>
+          <input type="text" name="subject" class="textbox" />
+        </div>
+        <br />
+        <br />
+        <div id="message-div">
+          <label>Message : </label>
+          &nbsp<input
+            type="text"
+            name="message"
+            class="textbox"
+            style="font-size: 12pt; height: 100px; width: 250px"
+          />
+        </div>
+        <br />
+        <br />
+        <div>
+          <button type="submit" id="submit">Post Message</button>
+        </div>
+      </div>
+    </form>
+  </body>
+</html>
+
+
+---register.html---
+
+<!DOCTYPE html>
+<html>
+  <title>Register</title>
+
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
+    <script type = "text/javascript">
+      var loadFile = function (event) {
+      var image = document.getElementById("imagePreview");
+      image.src = URL.createObjectURL(event.target.files[0]);
+      };
+    </script>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='login.css') }}"
+    />
+    <form
+      id="login-form"
+      method="POST"
+      action="{{ url_for('.register_user')  }}"
+      enctype="multipart/form-data"
+    >
+      <br />
+      <br />
+      <br />
+      <div id="login-frame">
+        <!-- <form method="POST" action = "{{ url_for('.upload_file') }}"> -->
+          <div>
+            <img id = "imagePreview" src = "#" alt = "image" style="width:120px;height:120px;">
+            &nbsp &nbsp &nbsp<input type="file" id="upload" name = "upload" accept="image/x-png,image/gif,image/jpeg" onchange="loadFile(event)"></input>
+          </div>
+        <!-- </form> -->
+        <br>
+
+        <div id="user">
+          <label for="Id">ID:</label>
+          <input type="text" name="id" class="textbox" />
+        </div>
+        <br>
+        <div id="user">
+          <label for="Username">Username:</label>
+          <input type="text" name="user" class="textbox" />
+        </div>
+        <br />
+        <div id="pwd">
+          <label for="Password">Password:</label>
+          <input type="password" name="password" class="textbox" />
+        </div>
+        <br />
+        <div>
+          <button type="submit" id="submit">Register</button>
+          <br />
+          <label id="invalid-label" name="invalid">{{invalid}}</label>
+        </div>
+      </div>
+    </form>
+  </body>
+</html>
+
+
+---past_details.html---
+
+<html>
+  <title>Post Details</title>
+  <div>
+    <img
+      id="imagePreview"
+      src="{{image}}"
+      alt="image"
+      style="width: 120px; height: 120px"
+    />
+    <br />
+    <a href="{{ url_for('.back') }}"><h4>{{user_name}}</h4></a>
+  </div>
+</html>
+
+
+---user_post_area.html---
+
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='forum.css') }}"
+    />
+  </head>
+  <title>User Post Area</title>
+  <br />
+  <div>
+    <img
+      id="imagePreview"
+      src="{{image}}"
+      alt="image"
+      style="width: 120px; height: 120px"
+    />
+    <br />
+    <a href="{{ url_for('.back') }}"><h4>{{user_name}}</h4></a>
+  </div>
+  <div class="header">
+    <form id="login-form" method="POST">
+      <a href="{{ url_for('.edit_password') }}">Edit Password</a>
+      <span class="space"></span>
+      <a href="{{ url_for('.edit_post') }}" id="customer"> Edit Post </a>
+    </form>
+  </div>
+</html>
+
+
+---all_posts.css---
+
+ul {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  background-color: white;
+}
+
+li {
+  position: relative;
+  padding-left: 30px;
+  height: auto;
+  line-height: 50px;
+  margin: 5px;
+  border: 1px solid #aaa;
+  border-radius: 8px;
+  width: auto;
+  background: #cccccc; /* Old browsers */
+  background: -moz-linear-gradient(
+    top,
+    #cccccc 0%,
+    #ffffff 25%,
+    #ffffff 75%,
+    #cccccc 100%
+  ); /* FF3.6+ */
+  background: -webkit-gradient(
+    linear,
+    left top,
+    left bottom,
+    color-stop(0%, #cccccc),
+    color-stop(25%, #ffffff),
+    color-stop(75%, #ffffff),
+    color-stop(100%, #cccccc)
+  ); /* Chrome,Safari4+ */
+  background: -webkit-linear-gradient(
+    top,
+    #cccccc 0%,
+    #ffffff 25%,
+    #ffffff 75%,
+    #cccccc 100%
+  ); /* Chrome10+,Safari5.1+ */
+  background: -o-linear-gradient(
+    top,
+    #cccccc 0%,
+    #ffffff 25%,
+    #ffffff 75%,
+    #cccccc 100%
+  ); /* Opera 11.10+ */
+  background: -ms-linear-gradient(
+    top,
+    #cccccc 0%,
+    #ffffff 25%,
+    #ffffff 75%,
+    #cccccc 100%
+  ); /* IE10+ */
+  background: linear-gradient(
+    to bottom,
+    #cccccc 0%,
+    #ffffff 25%,
+    #ffffff 75%,
+    #cccccc 100%
+  ); /* W3C */
+  filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#cccccc', endColorstr='#cccccc',GradientType=0 ); /* IE6-9 */
+  cursor: pointer;
+
+  box-shadow: 2px 2px 3px #666;
+  user-select: none;
+}
+
+li:before {
+  position: absolute;
+  content: "";
+  left: 4px;
+  top: 50%;
+  margin-top: -10px;
+  border-left: 20px solid #ccc;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+}
+
+li:after {
+  position: absolute;
+  content: "";
+  left: 4px;
+  top: 50%;
+  margin-top: -10px;
+  border-left: 5px solid white;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+}
+
+li:hover {
+  border-color: #777;
+  box-shadow: 3px 3px 5px #333;
+
+  background: #eeeeee; /* Old browsers */
+  background: -moz-linear-gradient(
+    top,
+    #dddddd 0%,
+    #ffffff 25%,
+    #ffffff 75%,
+    #dddddd 100%
+  ); /* FF3.6+ */
+  background: -webkit-gradient(
+    linear,
+    left top,
+    left bottom,
+    color-stop(0%, #dddddd),
+    color-stop(25%, #ffffff),
+    color-stop(75%, #ffffff),
+    color-stop(100%, #dddddd)
+  ); /* Chrome,Safari4+ */
+  background: -webkit-linear-gradient(
+    top,
+    #dddddd 0%,
+    #ffffff 25%,
+    #ffffff 75%,
+    #dddddd 100%
+  ); /* Chrome10+,Safari5.1+ */
+  background: -o-linear-gradient(
+    top,
+    #dddddd 0%,
+    #ffffff 25%,
+    #ffffff 75%,
+    #dddddd 100%
+  ); /* Opera 11.10+ */
+  background: -ms-linear-gradient(
+    top,
+    #dddddd 0%,
+    #ffffff 25%,
+    #ffffff 75%,
+    #dddddd 100%
+  ); /* IE10+ */
+  background: linear-gradient(
+    to bottom,
+    #dddddd 0%,
+    #ffffff 25%,
+    #ffffff 75%,
+    #dddddd 100%
+  ); /* W3C */
+  filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#eeeeee', endColorstr='#dddddd',GradientType=0 ); /* IE6-9 */
+}
+
+li:hover:before {
+  border-left-color: #777;
+}
+
+li:active {
+  background: #eee;
+  box-shadow: inset 0 1px 1px #666;
+}
+
+
+---edit_password.css---
+
+#password-details {
+  width: 80%;
+  margin: auto;
+  padding: 1.5%;
+  text-align: center;
+  font-size: 13px;
+  font-family: Arial, Helvetica, sans-serif;
+  float: center;
+  display: block;
+}
+
+#submit {
+  background: linear-gradient(to bottom, #44c767 5%, #5cbf2a 100%);
+  background-color: #44c767;
+  border-radius: 30px;
+  border: 1px solid #18ab29;
+  display: inline-block;
+  cursor: pointer;
+  color: #ffffff;
+  font-family: Arial;
+  font-size: 15px;
+  padding: 10px 25px;
+  text-decoration: none;
+  text-shadow: 0px 1px 0px #2f6627;
+}
+
+#invalid-label {
+  color: red;
+  font-size: 13px;
+  text-align: center;
+}
+
+
+---login.css---
+
+#login-frame {
+  width: 20%;
+  margin: auto;
+  background: #fff;
+  padding: 10%;
+  text-align: center;
+  font-size: 90%;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+#invalid {
+  color: red;
+  font-size: 13px;
+  text-align: center;
+}
+
+#user,
+#pwd {
+  padding: 1%;
+}
+
+#submit {
+  background: linear-gradient(to bottom, #44c767 5%, #5cbf2a 100%);
+  background-color: #44c767;
+  border-radius: 20px;
+  border: 1px solid #18ab29;
+  display: inline-block;
+  cursor: pointer;
+  color: #ffffff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 15px;
+  padding: 10px 25px;
+  text-decoration: none;
+  text-shadow: 0px 1px 0px #2f6627;
+}
+
+#submit a:hover {
+  background: linear-gradient(to bottom, #5cbf2a 5%, #44c767 100%);
+  background-color: #5cbf2a;
+}
+
+#submit a.active {
+  position: relative;
+  top: 1px;
+}
+
+.textbox {
+  border-radius: 5px;
+}
+
+---message_post.css---
+
+#submit {
+  background: linear-gradient(to bottom, #44c767 5%, #5cbf2a 100%);
+  background-color: #44c767;
+  border-radius: 20px;
+  border: 1px solid #18ab29;
+  display: inline-block;
+  cursor: pointer;
+  color: #ffffff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 15px;
+  padding: 10px 25px;
+  text-decoration: none;
+  text-shadow: 0px 1px 0px #2f6627;
+}
+
+.textbox {
+  border-radius: 5px;
+}
+
+#message-frame {
+  width: 80%;
+  margin: auto;
+  background: #fff;
+  padding: 10%;
+  text-align: center;
+  font-size: 90%;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+head {
+  text-align: center;
+  font-size: 90%;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+
+----------CODE OF TASK 2----------------------
+
+---app.yaml---
+
+runtime: python39
+
+handlers:
+  # This configures Google App Engine to serve the files in the app's static
+  # directory.
+- url: /static
+  static_dir: static
+
+  # This handler routes all requests not caught above to your main app. It is
+  # required when static routes are defined, but can be omitted (along with
+  # the entire handlers section) when there are no static files defined.
+- url: /.*
+  script: auto
+
+
+---main.py---
+
+from google.cloud import bigquery
+from flask import *
+from google.auth.transport import requests
+from google.cloud import datastore, storage
+from google.cloud.storage import client
+
+app = Flask(__name__)
+
+@app.route('/one')
+def one():
+    bigquery_client = bigquery.Client()
+    query = """
+        SELECT time_ref as TIME_REF, SUM(CASE WHEN account='Imports' THEN value END) + SUM(CASE WHEN account='Exports' THEN value END) as VALUE FROM `chetan-r-project2.task_2_1.task2_1` group by time_ref order by VALUE desc LIMIT 10
+        """
+    result = bigquery_client.query(query)
+    return render_template('one.html', results = result)
+
+@app.route('/two')
+def two():
+    bigquery_client = bigquery.Client()
+    query = """
+        SELECT country_label as COUNTRY_LABEL, product_type as PRODUCT_TYPE, SUM(CASE WHEN account='Imports' THEN value END) - SUM(CASE WHEN account='Exports' THEN value END)AS TRADE_DEFICIENT_VALUE, status as STATUS
+        FROM `chetan-r-project2.task_2_1.task2_1` LEFT JOIN `chetan-r-project2.task_2_1.country`
+        USING(country_code)
+        WHERE SUBSTRING(time_ref, 1, 4) IN ('2014', '2015', '2016')
+        AND status='F' AND product_type = "Goods"
+        GROUP BY country_label, product_type, status
+        ORDER BY TRADE_DEFICIENT_VALUE DESC
+        LIMIT 50
+        """
+    result = bigquery_client.query(query)
+    return render_template('two.html', results = result)
+
+@app.route('/three')
+def three():
+    bigquery_client = bigquery.Client()
+    query = """
+        SELECT service_label as SERVICE_LABEL, SUM(CASE WHEN account='Exports' THEN value END) - SUM(CASE WHEN account='Imports' THEN value END)AS TRADE_SURPLUS_VALUE
+FROM `chetan-r-project2.task_2_1.task2_1` LEFT JOIN `chetan-r-project2.task_2_1.serivce` on code = service_code
+WHERE country_code in (SELECT country_code
+        FROM `chetan-r-project2.task_2_1.task2_1` LEFT JOIN `chetan-r-project2.task_2_1.country`
+        USING(country_code)
+        WHERE SUBSTRING(time_ref, 1, 4) IN ('2014', '2015', '2016')
+        AND status='F' AND product_type = "Goods"
+        GROUP BY country_code, product_type, status
+        LIMIT 50)
+GROUP BY SERVICE_LABEL    
+ORDER BY TRADE_SURPLUS_VALUE DESC
+        LIMIT 30 
+        """
+    result = bigquery_client.query(query)
+    return render_template('three.html', results = result)
+
+@app.route('/')
+def root():
+    return render_template('index.html')
+
+
+if __name__ == '__main__':
+    app.run(host='127.0.0.1', port=8080, debug=True)
+
+
+---index.html---
+
+<html>
+  <title>Task 2.1</title>
+  <body>
+    <form id="login-form" method="POST">
+      <div>
+        <a href="{{ url_for('.one') }}">Task 2.1 </a>
+        &nbsp &nbsp &nbsp
+        <a href="{{ url_for('.two') }}">
+          Task 2.2
+        </a>
+        &nbsp &nbsp &nbsp
+        <a href="{{ url_for('.three') }}"> Task 2.3 </a>
+      </div>
+    </form>
+  </body>
+</html>
+
+---one.html---
+
+<html>
+  <title>Task 2.1</title>
+  <body>
+    <style>
+      table,
+      th,
+      td {
+        border: 1px solid black;
+      }
+    </style>
+    <div>
+      <table>
+        <tr>
+          <th>Time Ref</th>
+          <th>Value</th>
+        </tr>
+        <tr>
+          {% for result in results %}
+          <td>{{result.TIME_REF}}</td>
+          &nbsp
+          <td>{{result.VALUE}}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </body>
+</html>
+
+
+---two.html---
+
+<html>
+  <title>Task 2.2</title>
+  <style>
+    table,
+    th,
+    td {
+      border: 1px solid black;
+    }
+  </style>
+  <body>
+    <div>
+      <table>
+        <tr>
+          <th>Country Label</th>
+          <th>Product Type</th>
+          <th>Trade Deficient Value</th>
+          <th>Status</th>
+        </tr>
+        <tr>
+          {% for result in results %} &nbsp
+          <td>{{result.COUNTRY_LABEL}}</td>
+          &nbsp
+          <td>{{result.PRODUCT_TYPE}}</td>
+          &nbsp
+          <td>{{result.TRADE_DEFICIENT_VALUE}}</td>
+          &nbsp
+          <td>{{result.STATUS}}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </body>
+</html>
+
+
+---three.html---
+
+<html>
+  <title>Task 2.3</title>
+  <style>
+    table,
+    th,
+    td {
+      border: 1px solid black;
+    }
+  </style>
+  <body>
+    <div>
+      <table>
+        <tr>
+          <th>Service Label</th>
+          <th>Trade Surplus Value</th>
+        </tr>
+        <tr>
+          {% for result in results %} &nbsp
+          <td>{{result.SERVICE_LABEL}}</td>
+          &nbsp
+          <td>{{result.TRADE_SURPLUS_VALUE}}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </body>
+</html>
+
+
+---Task 3 Proposal---
+
+Objective: To build a tool that serves as an online photo printing ordering system for the customer user and administrative controls for the admin user
+
+Component required:
+Amazon S3 bucket - this is required to store the image files from the order placed by the customers.
+Amazon Relational Database service (RDS) - this is used to store the various information such as registered customers, order status and details
+
+proposed functions:
+login function - for the user to login and place the order
+register function - for any new customer to register first before using the tool
+past order display - this function displays all the previous orders placed by the user
+notification - this function is used to notify the customer when an order is dispatched
